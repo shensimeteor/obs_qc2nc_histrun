@@ -15,9 +15,10 @@ $MEMBER=$ARGV[1];
 $START_CYCLE=$ARGV[2];
 $END_CYCLE=$ARGV[3];
 $DOM_LIST=$ARGV[4]; #0 for non-thin, 1,2,3.. for obs_thin
-$DIR_WORK=$ARGV[5]; # #./OBS_QC2NC/$GMID/$MEMBER/cycle/date/domain
+$DIR_WORKRUN=$ARGV[5]; # #./OBS_QC2NC/$GMID/$MEMBER/cycle/date/domain
 $DIR_OUT=$ARGV[6]; #./$cycle/$dom/*nc
 @DOMAINS=split(/,/, $DOM_LIST);
+print("$GMID $MEMBER $START_CYCLE $END_CYCLE $DOM_LIST $DIR_WORKRUN $DIR_OUT\n");
 
 #constant parameters
 $HOMEDIR=$ENV{HOME};
@@ -29,11 +30,11 @@ $ARCDIR="$HOMEDIR/data/cycles/$GMID/archive/$MEMBER/"; #obs/
 $CWD=`pwd`;
 chomp($CWD);
 
-if (! -e "$GSJOBDIR/ensprocinput.pl") {
-    print "\nERROR: Cannot find file $GSJOBDIR/ensprocinput.pl\n\n";
+if (! -e "$GMODDIR/flexinput.pl") {
+    print "\nERROR: Cannot find file $GMODDIR/flexinput.pl\n\n";
     exit -1;
 }else {
-    require "$GSJOBDIR/ensprocinput.pl";
+    require "$GMODDIR/flexinput.pl";
 }
 
 if (! -e "$ENSPROCS/common_tools.pl") {
@@ -41,34 +42,37 @@ if (! -e "$ENSPROCS/common_tools.pl") {
     exit -1;
 }
 require "$ENSPROCS/common_tools.pl";
+$DIR_OUT=&tool_to_abspath($DIR_OUT);
+print($DIR_OUT . "\n");
 
 #define parameters
-$time_start = 53; $time_end=7; # select 14 minutes obs
+$time_start = 31; $time_end=30; # select 14 minutes obs
 $latlon_filename = "latlon.txt";
 $thin_nml_dir = "$CWD/thin_namelists/"; #namelist.thin.d?
-
 $cycle=$START_CYCLE;
 while($cycle <= $END_CYCLE) {
-    $start_date12=&tool_date12_add("${cycle}00", - $CYC_INT, "hour");
+    $start_date12=&tool_date12_add("${cycle}00", -$CYC_INT, "hour");
     $end_date12="${cycle}00";
     $DIR_QC = "$RUNDIR/RAP_RTFDDA/";
     print("begin cycle $cycle ==================== \n");
+    print("$start_date12, $end_date12 \n");
     for($date12=$start_date12; $date12<=$end_date12; $date12=&tool_date12_add($date12, 1, "hour")) {
         $date=substr($date12, 0, 10);
-        print("of $date -------------");
-        $workdir="$DIR_WORK/OBS_QC2NC/$GMID/$MEMBER/$cycle/$date/";
+        print("of $date ------------- \n");
+        $workdir="$DIR_WORKRUN/OBS_QC2NC/$GMID/$MEMBER/$cycle/$date/";
+        print($workdir."\n");
         system("test -d $workdir || mkdir -p $workdir");
         chdir($workdir);
         symlink("$ENSPROCS\/RT_all.obs_trim-merge.USA_ss","$workdir\/RT_all.obs_trim-merge.USA_ss");
-        symlink("$GSJOBDIR\/$latlon_filename","$workdir\/latlon.txt");
+        symlink("$GMODDIR\/$latlon_filename","$workdir\/latlon.txt");
         
         #find qc_out file
         $valid_m1     = &tool_date12_add($date12, -1, "hour");
-        $valid_p1     = &hh_advan_date( $date, 1, "hour");
+        $valid_p1     = &tool_date12_add($date12, 1, "hour");
         $date_time    = &dtstring($date);
         $date_time_m1 = &dtstring($valid_m1);
         $date_time_p1 = &dtstring($valid_p1);
-        print "date_time = $DIR_QC/qc_out_${date_time}:00:00.0000; date_time_m1 = qc_out_${date_time_m1}:00:00.0000\n";
+        #print "date_time = $DIR_QC/qc_out_${date_time}:00:00.0000; date_time_m1 = qc_out_${date_time_m1}:00:00.0000\n";
         $got_qc=1;
         if (-s "$DIR_QC/qc_out_${date_time_m1}:00:00.0000" &&
                 -s "$DIR_QC/qc_out_${date_time}:00:00.0000") {
@@ -95,6 +99,8 @@ while($cycle <= $END_CYCLE) {
                 system("cp $DIR_QC/qc_out_${date_time}:00:00.0000 hourly.obs");
             } else{
                 print("can not find qc_out file, skip \n");
+                print(" - $DIR_QC/qc_out_${date_time}:00:00.0000 \n");
+                print(" - $RUNDIR/RAP_RTFDDA/qc_out_${date_time}:00:00.0000 \n");
                 next;
             }
         }
@@ -129,15 +135,20 @@ while($cycle <= $END_CYCLE) {
                   system("rm -f *.hourly.obs");
                }
            }else{
+               symlink("$workdir/${valid_time_short}.hourly.obs", "$dir_dom/${valid_time_short}.hourly.obs");
                system("$EXECUTABLE_ARCHIVE\/QCtoNC.exe ${valid_time_short}.hourly.obs");
                system("rm -rf *hourly.obs");
            }
            $outdir="$DIR_OUT/$cycle/d0${domi}/";
            system("test -d $outdir || mkdir -p $outdir");
            system("mv *nc $outdir/");
-        }
-    }
-}
+        } #dom
+        chdir($DIR_WORKRUN);
+        #system("rm -rf $workdir");
+    } #date
+    $cycle12=&tool_date12_add( "${cycle}00", $CYC_INT, "hour");
+    $cycle=substr($cycle12, 0, 10);
+} #cycle
 
         
 
